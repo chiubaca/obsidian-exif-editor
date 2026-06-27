@@ -1,13 +1,20 @@
 import { Plugin, Notice, Setting, TFile, ItemView, WorkspaceLeaf } from 'obsidian';
-// @ts-ignore
 import * as piexif from 'piexifjs';
+import type { ExifData } from 'piexifjs';
 
 export const VIEW_TYPE_EXIF = 'exif-editor-view';
+
+interface TagConfig {
+  section: string;
+  tag: string;
+  label: string;
+  placeholder: string;
+}
 
 export class ExifEditorView extends ItemView {
   plugin: ExifEditorPlugin;
   file: TFile | null = null;
-  exifData: any = null;
+  exifData: ExifData | null = null;
   originalBinary: string = '';
 
   constructor(leaf: WorkspaceLeaf, plugin: ExifEditorPlugin) {
@@ -27,22 +34,22 @@ export class ExifEditorView extends ItemView {
     return 'camera';
   }
 
-  async setFile(file: TFile) {
+  async setFile(file: TFile): Promise<void> {
     this.file = file;
     await this.loadExifData();
     this.redraw();
   }
 
-  async loadExifData() {
+  async loadExifData(): Promise<void> {
     if (!this.file) return;
-    
+
     try {
       const arrayBuffer = await this.plugin.app.vault.readBinary(this.file);
       this.originalBinary = this.plugin.arrayBufferToBinaryString(arrayBuffer);
-      
+
       try {
         this.exifData = piexif.load(this.originalBinary);
-      } catch (e) {
+      } catch {
         this.exifData = this.plugin.createEmptyExif();
       }
     } catch (error) {
@@ -51,20 +58,20 @@ export class ExifEditorView extends ItemView {
     }
   }
 
-  redraw() {
+  redraw(): void {
     const { contentEl } = this;
     contentEl.empty();
-    
+
     if (!this.file) {
       contentEl.createEl('p', { text: 'No EXIF data' });
       return;
     }
 
     contentEl.createEl('h3', { text: this.file.name });
-    
+
     const form = contentEl.createDiv('exif-form');
-    
-    const tagsToEdit = [
+
+    const tagsToEdit: TagConfig[] = [
       { section: '0th', tag: 'ImageDescription', label: 'Description', placeholder: 'Image description' },
       { section: '0th', tag: 'Artist', label: 'Artist', placeholder: 'Photographer name' },
       { section: '0th', tag: 'Copyright', label: 'Copyright', placeholder: 'Copyright notice' },
@@ -74,7 +81,7 @@ export class ExifEditorView extends ItemView {
       { section: 'Exif', tag: 'UserComment', label: 'User Comment', placeholder: 'Tags, notes, or any free text...' },
     ];
 
-    const sectionMap: Record<string, any> = {
+    const sectionMap: Record<string, Record<string, number>> = {
       '0th': piexif.ImageIFD,
       'Exif': piexif.ExifIFD,
       'GPS': piexif.GPSIFD,
@@ -85,18 +92,25 @@ export class ExifEditorView extends ItemView {
       const setting = new Setting(form)
         .setName(label)
         .setDesc(`${section}.${tag}`);
-      
+
       const sectionObj = sectionMap[section];
       const tagCode = sectionObj?.[tag];
-      const value = this.exifData?.[section]?.[tagCode] || '';
-      
+      const sectionData = this.exifData?.[section as keyof ExifData];
+      const value = (typeof sectionData === 'object' && sectionData !== null && tagCode !== undefined)
+        ? String((sectionData as Record<string, unknown>)[tagCode] ?? '')
+        : '';
+
       setting.addText(text => {
         text.setPlaceholder(placeholder)
           .setValue(value)
           .onChange((newValue) => {
-            if (!this.exifData[section]) this.exifData[section] = {};
+            if (!this.exifData) this.exifData = this.plugin.createEmptyExif();
+            const sectionKey = section as keyof ExifData;
+            if (!this.exifData[sectionKey] || typeof this.exifData[sectionKey] !== 'object') {
+              this.exifData[sectionKey] = {};
+            }
             if (tagCode !== undefined) {
-              this.exifData[section][tagCode] = newValue;
+              (this.exifData[sectionKey] as Record<string, unknown>)[tagCode] = newValue;
             }
           });
       });
@@ -108,34 +122,31 @@ export class ExifEditorView extends ItemView {
       attr: { rows: '8', style: 'width: 100%; font-family: monospace;' }
     });
     jsonArea.value = JSON.stringify(this.exifData, null, 2);
-    
+
     const updateJson = () => {
       try {
-        this.exifData = JSON.parse(jsonArea.value);
+        this.exifData = JSON.parse(jsonArea.value) as ExifData;
         new Notice('JSON parsed successfully');
-      } catch (e) {
+      } catch {
         new Notice('Invalid JSON');
       }
     };
-    
+
     const buttonContainer = contentEl.createDiv({ cls: 'exif-button-container' });
-    buttonContainer.style.marginTop = '10px';
-    buttonContainer.style.display = 'flex';
-    buttonContainer.style.gap = '10px';
 
     buttonContainer.createEl('button', { text: 'Update from JSON', cls: 'mod-cta' }).addEventListener('click', updateJson);
 
     const saveBtn = buttonContainer.createEl('button', { text: 'Save EXIF', cls: 'mod-cta' });
-    saveBtn.addEventListener('click', async () => {
-      await this.plugin.saveExifData(this.file!, this.originalBinary, this.exifData);
+    saveBtn.addEventListener('click', () => {
+      void this.plugin.saveExifData(this.file!, this.originalBinary, this.exifData);
     });
   }
 
-  async onClose() {
+  async onClose(): Promise<void> {
     this.contentEl.empty();
   }
 
-  clearView() {
+  clearView(): void {
     this.file = null;
     this.exifData = null;
     this.originalBinary = '';
@@ -146,7 +157,7 @@ export class ExifEditorView extends ItemView {
 export default class ExifEditorPlugin extends Plugin {
   view: ExifEditorView | null = null;
 
-  async onload() {
+  async onload(): Promise<void> {
     this.registerView(VIEW_TYPE_EXIF, (leaf) => new ExifEditorView(leaf, this));
 
     this.addCommand({
@@ -156,7 +167,7 @@ export default class ExifEditorPlugin extends Plugin {
         const file = this.app.workspace.getActiveFile();
         if (file && this.isImageFile(file)) {
           if (!checking) {
-            this.activateView(file);
+            void this.activateView(file);
           }
           return true;
         }
@@ -167,19 +178,19 @@ export default class ExifEditorPlugin extends Plugin {
     this.addRibbonIcon('camera', 'Edit EXIF', () => {
       const file = this.app.workspace.getActiveFile();
       if (file && this.isImageFile(file)) {
-        this.activateView(file);
+        void this.activateView(file);
       } else {
-        this.activateView();
+        void this.activateView();
       }
     });
 
     this.registerEvent(
       this.app.workspace.on('active-leaf-change', () => {
-        const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_EXIF)[0]?.view as ExifEditorView;
+        const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_EXIF)[0]?.view as ExifEditorView | undefined;
         if (view) {
           const file = this.app.workspace.getActiveFile();
           if (file && this.isImageFile(file)) {
-            view.setFile(file);
+            void view.setFile(file);
           } else {
             view.clearView();
           }
@@ -192,7 +203,7 @@ export default class ExifEditorPlugin extends Plugin {
     return ['jpg', 'jpeg', 'JPG', 'JPEG'].includes(file.extension);
   }
 
-  async activateView(file?: TFile) {
+  async activateView(file?: TFile): Promise<void> {
     const { workspace } = this.app;
 
     let leaf = workspace.getLeavesOfType(VIEW_TYPE_EXIF)[0];
@@ -210,7 +221,7 @@ export default class ExifEditorPlugin extends Plugin {
     }
   }
 
-  createEmptyExif() {
+  createEmptyExif(): ExifData {
     return {
       '0th': {},
       'Exif': {},
@@ -238,7 +249,12 @@ export default class ExifEditorPlugin extends Plugin {
     return buffer;
   }
 
-  async saveExifData(file: TFile, originalBinary: string, exifData: any) {
+  async saveExifData(file: TFile, originalBinary: string, exifData: ExifData | null): Promise<void> {
+    if (!exifData) {
+      new Notice('No EXIF data to save');
+      return;
+    }
+
     try {
       const exifDump = piexif.dump(exifData);
       const newBinary = piexif.insert(exifDump, originalBinary);

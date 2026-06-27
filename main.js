@@ -2454,13 +2454,18 @@ var ExifEditorView = class extends import_obsidian.ItemView {
       const setting = new import_obsidian.Setting(form).setName(label).setDesc(`${section}.${tag}`);
       const sectionObj = sectionMap[section];
       const tagCode = sectionObj == null ? void 0 : sectionObj[tag];
-      const value = ((_b = (_a = this.exifData) == null ? void 0 : _a[section]) == null ? void 0 : _b[tagCode]) || "";
+      const sectionData = (_a = this.exifData) == null ? void 0 : _a[section];
+      const value = typeof sectionData === "object" && sectionData !== null && tagCode !== void 0 ? String((_b = sectionData[tagCode]) != null ? _b : "") : "";
       setting.addText((text) => {
         text.setPlaceholder(placeholder).setValue(value).onChange((newValue) => {
-          if (!this.exifData[section])
-            this.exifData[section] = {};
+          if (!this.exifData)
+            this.exifData = this.plugin.createEmptyExif();
+          const sectionKey = section;
+          if (!this.exifData[sectionKey] || typeof this.exifData[sectionKey] !== "object") {
+            this.exifData[sectionKey] = {};
+          }
           if (tagCode !== void 0) {
-            this.exifData[section][tagCode] = newValue;
+            this.exifData[sectionKey][tagCode] = newValue;
           }
         });
       });
@@ -2480,14 +2485,11 @@ var ExifEditorView = class extends import_obsidian.ItemView {
       }
     };
     const buttonContainer = contentEl.createDiv({ cls: "exif-button-container" });
-    buttonContainer.style.marginTop = "10px";
-    buttonContainer.style.display = "flex";
-    buttonContainer.style.gap = "10px";
     buttonContainer.createEl("button", { text: "Update from JSON", cls: "mod-cta" }).addEventListener("click", updateJson);
     const saveBtn = buttonContainer.createEl("button", { text: "Save EXIF", cls: "mod-cta" });
-    saveBtn.addEventListener("click", () => __async(this, null, function* () {
-      yield this.plugin.saveExifData(this.file, this.originalBinary, this.exifData);
-    }));
+    saveBtn.addEventListener("click", () => {
+      void this.plugin.saveExifData(this.file, this.originalBinary, this.exifData);
+    });
   }
   onClose() {
     return __async(this, null, function* () {
@@ -2516,7 +2518,7 @@ var ExifEditorPlugin = class extends import_obsidian.Plugin {
           const file = this.app.workspace.getActiveFile();
           if (file && this.isImageFile(file)) {
             if (!checking) {
-              this.activateView(file);
+              void this.activateView(file);
             }
             return true;
           }
@@ -2526,9 +2528,9 @@ var ExifEditorPlugin = class extends import_obsidian.Plugin {
       this.addRibbonIcon("camera", "Edit EXIF", () => {
         const file = this.app.workspace.getActiveFile();
         if (file && this.isImageFile(file)) {
-          this.activateView(file);
+          void this.activateView(file);
         } else {
-          this.activateView();
+          void this.activateView();
         }
       });
       this.registerEvent(
@@ -2538,7 +2540,7 @@ var ExifEditorPlugin = class extends import_obsidian.Plugin {
           if (view) {
             const file = this.app.workspace.getActiveFile();
             if (file && this.isImageFile(file)) {
-              view.setFile(file);
+              void view.setFile(file);
             } else {
               view.clearView();
             }
@@ -2592,6 +2594,10 @@ var ExifEditorPlugin = class extends import_obsidian.Plugin {
   }
   saveExifData(file, originalBinary, exifData) {
     return __async(this, null, function* () {
+      if (!exifData) {
+        new import_obsidian.Notice("No EXIF data to save");
+        return;
+      }
       try {
         const exifDump = piexif.dump(exifData);
         const newBinary = piexif.insert(exifDump, originalBinary);
