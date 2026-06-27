@@ -431,7 +431,7 @@ export class JsonTreeEditor {
       this.commitKeyEdit(obj, oldKey, input.value, path);
     });
 
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       input.focus();
       input.select();
     });
