@@ -2440,7 +2440,8 @@ var ExifEditorView = class extends import_obsidian.ItemView {
       { section: "0th", tag: "Copyright", label: "Copyright", placeholder: "Copyright notice" },
       { section: "Exif", tag: "DateTimeOriginal", label: "Date Taken", placeholder: "YYYY:MM:DD HH:MM:SS" },
       { section: "Exif", tag: "Software", label: "Software", placeholder: "Software used" },
-      { section: "Exif", tag: "LensModel", label: "Lens Model", placeholder: "Lens model" }
+      { section: "Exif", tag: "LensModel", label: "Lens Model", placeholder: "Lens model" },
+      { section: "Exif", tag: "UserComment", label: "User Comment", placeholder: "Tags, notes, or any free text..." }
     ];
     const sectionMap = {
       "0th": piexif.ImageIFD,
