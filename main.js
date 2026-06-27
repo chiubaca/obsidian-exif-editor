@@ -16929,6 +16929,7 @@ function createEmptyExif() {
 var JsonTreeEditor = class {
   constructor(container, data, onChange) {
     this.expandedPaths = /* @__PURE__ */ new Set();
+    this.editingPath = null;
     this.container = container;
     this.data = data;
     this.onChange = onChange;
@@ -16949,19 +16950,125 @@ var JsonTreeEditor = class {
   }
   renderValue(container, value, path, depth) {
     if (value === null) {
-      container.createSpan({ text: "null", cls: "json-null" });
+      const span = container.createSpan({ text: "null", cls: "json-null json-editable" });
+      if (this.editingPath !== path) {
+        span.addEventListener("click", () => this.startEdit(path, value));
+      }
     } else if (typeof value === "boolean") {
-      container.createSpan({ text: String(value), cls: "json-boolean" });
+      const span = container.createSpan({ text: String(value), cls: "json-boolean json-editable" });
+      if (this.editingPath !== path) {
+        span.addEventListener("click", () => this.startEdit(path, value));
+      }
     } else if (typeof value === "number") {
-      container.createSpan({ text: String(value), cls: "json-number" });
+      const span = container.createSpan({ text: String(value), cls: "json-number json-editable" });
+      if (this.editingPath !== path) {
+        span.addEventListener("click", () => this.startEdit(path, value));
+      }
     } else if (typeof value === "string") {
-      const span = container.createSpan({ cls: "json-string" });
+      const span = container.createSpan({ cls: "json-string json-editable" });
       span.textContent = `"${value}"`;
+      if (this.editingPath !== path) {
+        span.addEventListener("click", () => this.startEdit(path, value));
+      }
     } else if (Array.isArray(value)) {
       this.renderArray(container, value, path, depth);
     } else if (typeof value === "object") {
       this.renderObject(container, value, path, depth);
     }
+  }
+  startEdit(path, originalValue) {
+    this.editingPath = path;
+    this.render();
+    const input = this.container.querySelector(`[data-path="${path}"]`);
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+  getValueAtPath(path) {
+    if (path === "")
+      return this.data;
+    const parts = path.split(/\.|\[(\d+)\]/).filter(Boolean);
+    let current = this.data;
+    for (const part of parts) {
+      if (current && typeof current === "object") {
+        current = current[part];
+      } else {
+        return void 0;
+      }
+    }
+    return current;
+  }
+  setValueAtPath(path, newValue) {
+    if (path === "") {
+      this.data = newValue;
+      return;
+    }
+    const parts = path.split(/\.|\[(\d+)\]/).filter(Boolean);
+    const lastKey = parts.pop();
+    let current = this.data;
+    for (const part of parts) {
+      if (current && typeof current === "object") {
+        current = current[part];
+      }
+    }
+    if (current && typeof current === "object") {
+      current[lastKey] = newValue;
+    }
+  }
+  parseValue(input, originalValue) {
+    const trimmed = input.trim();
+    if (trimmed === "null")
+      return null;
+    if (trimmed === "true")
+      return true;
+    if (trimmed === "false")
+      return false;
+    if (/^-?\d+$/.test(trimmed)) {
+      return parseInt(trimmed, 10);
+    }
+    if (/^-?\d+\.\d+$/.test(trimmed)) {
+      return parseFloat(trimmed);
+    }
+    return trimmed;
+  }
+  commitEdit(path, input) {
+    const rawValue = input.value;
+    const originalValue = this.getValueAtPath(path);
+    const newValue = this.parseValue(rawValue, originalValue);
+    this.setValueAtPath(path, newValue);
+    this.editingPath = null;
+    this.onChange(this.data);
+    this.render();
+  }
+  cancelEdit() {
+    this.editingPath = null;
+    this.render();
+  }
+  renderEditableValue(container, path, value) {
+    const input = container.createEl("input", {
+      cls: "json-inline-input",
+      attr: { "data-path": path }
+    });
+    if (value === null) {
+      input.value = "null";
+    } else if (typeof value === "boolean") {
+      input.value = String(value);
+    } else if (typeof value === "number") {
+      input.value = String(value);
+    } else if (typeof value === "string") {
+      input.value = value;
+    }
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        this.commitEdit(path, input);
+      } else if (e.key === "Escape") {
+        this.cancelEdit();
+      }
+    });
+    input.addEventListener("blur", () => {
+      this.commitEdit(path, input);
+    });
   }
   renderObject(container, obj, path, depth) {
     const keys = Object.keys(obj);
@@ -16994,7 +17101,6 @@ var JsonTreeEditor = class {
     });
     if (isExpanded) {
       const body = container.createDiv("json-object-body");
-      body.style.marginLeft = "20px";
       keys.forEach((key, index) => {
         const row = body.createDiv("json-row");
         const keySpan = row.createSpan({
@@ -17005,13 +17111,17 @@ var JsonTreeEditor = class {
           this.editKey(obj, key, path, () => this.render());
         });
         const valueContainer = row.createSpan("json-value-container");
-        this.renderValue(valueContainer, obj[key], `${path}.${key}`, depth + 1);
+        const childPath = path ? `${path}.${key}` : key;
+        if (this.editingPath === childPath) {
+          this.renderEditableValue(valueContainer, childPath, obj[key]);
+        } else {
+          this.renderValue(valueContainer, obj[key], childPath, depth + 1);
+        }
         if (index < keys.length - 1) {
           row.createSpan({ text: ",", cls: "json-comma" });
         }
       });
       const closing = container.createDiv("json-closing-bracket");
-      closing.style.marginLeft = `${depth * 20}px`;
       closing.createSpan({ text: "}", cls: "json-bracket" });
     }
   }
@@ -17044,17 +17154,20 @@ var JsonTreeEditor = class {
     });
     if (isExpanded) {
       const body = container.createDiv("json-array-body");
-      body.style.marginLeft = "20px";
       arr.forEach((item, index) => {
         const row = body.createDiv("json-row");
         const valueContainer = row.createSpan("json-value-container");
-        this.renderValue(valueContainer, item, `${path}[${index}]`, depth + 1);
+        const childPath = path ? `${path}[${index}]` : `[${index}]`;
+        if (this.editingPath === childPath) {
+          this.renderEditableValue(valueContainer, childPath, item);
+        } else {
+          this.renderValue(valueContainer, item, childPath, depth + 1);
+        }
         if (index < arr.length - 1) {
           row.createSpan({ text: ",", cls: "json-comma" });
         }
       });
       const closing = container.createDiv("json-closing-bracket");
-      closing.style.marginLeft = `${depth * 20}px`;
       closing.createSpan({ text: "]", cls: "json-bracket" });
     }
   }

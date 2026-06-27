@@ -138,3 +138,31 @@
 .json-mode-toggle button:hover:not(.is-active) {
   background: var(--background-modifier-hover);
 }
+
+.json-editable {
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 2px;
+  transition: background 0.15s ease;
+}
+
+.json-editable:hover {
+  background: var(--background-modifier-hover);
+}
+
+.json-inline-input {
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  border: 1px solid var(--interactive-accent);
+  border-radius: 3px;
+  padding: 1px 4px;
+  outline: none;
+  min-width: 60px;
+  max-width: 100%;
+}
+
+.json-inline-input:focus {
+  box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
