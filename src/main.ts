@@ -127,7 +127,6 @@ export class ExifEditorView extends ItemView {
     const jsonEditorContainer = contentEl.createDiv('json-editor-container');
     let currentMode: 'tree' | 'text' = 'tree';
     let jsonArea: HTMLTextAreaElement | null = null;
-    let treeEditor: JsonTreeEditor | null = null;
 
     const modeToggle = jsonEditorContainer.createDiv('json-mode-toggle');
     const treeBtn = modeToggle.createEl('button', { text: 'Tree View' });
@@ -138,7 +137,7 @@ export class ExifEditorView extends ItemView {
     const updateFromText = () => {
       if (!jsonArea) return;
       try {
-        const parsed = JSON.parse(jsonArea.value);
+        const parsed: unknown = JSON.parse(jsonArea.value);
         const validated = safeParseExifData(parsed);
         if (validated) {
           this.exifData = validated;
@@ -164,7 +163,7 @@ export class ExifEditorView extends ItemView {
         const orientationValue = this.exifData?.['0th']?.[piexif.ImageIFD.Orientation];
         const orientation = typeof orientationValue === 'number' ? orientationValue : 1;
         
-        treeEditor = new JsonTreeEditor(
+        new JsonTreeEditor(
           treeContainer,
           this.exifData,
           (newData) => {
@@ -292,7 +291,7 @@ export default class ExifEditorPlugin extends Plugin {
       await leaf.setViewState({ type: VIEW_TYPE_EXIF });
     }
 
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
 
     const view = leaf.view as ExifEditorView;
     if (file) {

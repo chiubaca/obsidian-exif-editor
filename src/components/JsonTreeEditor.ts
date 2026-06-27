@@ -6,6 +6,7 @@ export class JsonTreeEditor {
   private expandedPaths: Set<string> = new Set();
   private expandedThumbnails: Set<string> = new Set();
   private editingPath: string | null = null;
+  private editingKeyPath: string | null = null;
 
   constructor(
     container: HTMLElement,
@@ -305,17 +306,22 @@ export class JsonTreeEditor {
 
       keys.forEach((key, index) => {
         const row = body.createDiv('json-row');
-        const keySpan = row.createSpan({
-          text: `"${key}": `,
-          cls: 'json-key',
-        });
+        const childPath = path ? `${path}.${key}` : key;
 
-        keySpan.addEventListener('click', () => {
-          this.editKey(obj, key, path, () => this.render());
-        });
+        if (this.editingKeyPath === childPath) {
+          this.renderEditableKey(row, obj, key, childPath);
+        } else {
+          const keySpan = row.createSpan({
+            text: `"${key}": `,
+            cls: 'json-key',
+          });
+
+          keySpan.addEventListener('click', () => {
+            this.startKeyEdit(childPath);
+          });
+        }
 
         const valueContainer = row.createSpan('json-value-container');
-        const childPath = path ? `${path}.${key}` : key;
 
         if (key === 'thumbnail' && this.isThumbnailData(obj[key])) {
           this.renderThumbnail(valueContainer, obj[key] as string, childPath);
@@ -397,18 +403,59 @@ export class JsonTreeEditor {
     }
   }
 
-  private editKey(
+  private startKeyEdit(path: string): void {
+    this.editingKeyPath = path;
+    this.render();
+  }
+
+  private renderEditableKey(
+    container: HTMLElement,
     obj: Record<string, unknown>,
     oldKey: string,
-    path: string,
-    onUpdate: () => void
+    path: string
   ): void {
-    const newKey = prompt('Rename key:', oldKey);
+    const input = container.createEl('input', {
+      cls: 'json-inline-input json-key-input',
+    });
+    input.value = oldKey;
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this.commitKeyEdit(obj, oldKey, input.value, path);
+      } else if (e.key === 'Escape') {
+        this.cancelKeyEdit();
+      }
+    });
+
+    input.addEventListener('blur', () => {
+      this.commitKeyEdit(obj, oldKey, input.value, path);
+    });
+
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+
+    container.createSpan({ text: ': ', cls: 'json-key' });
+  }
+
+  private commitKeyEdit(
+    obj: Record<string, unknown>,
+    oldKey: string,
+    newKey: string,
+    path: string
+  ): void {
+    this.editingKeyPath = null;
     if (newKey && newKey !== oldKey) {
       obj[newKey] = obj[oldKey];
       delete obj[oldKey];
       this.onChange(this.data);
-      onUpdate();
     }
+    this.render();
+  }
+
+  private cancelKeyEdit(): void {
+    this.editingKeyPath = null;
+    this.render();
   }
 }
