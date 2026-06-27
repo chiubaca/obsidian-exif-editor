@@ -1,6 +1,12 @@
 import { Plugin, Notice, Setting, TFile, ItemView, WorkspaceLeaf } from 'obsidian';
 import * as piexif from 'piexifjs';
-import type { ExifData } from 'piexifjs';
+import {
+  type ExifData,
+  safeParseExifData,
+  getExifValue,
+  setExifValue,
+  createEmptyExif,
+} from './schemas/exif';
 
 export const VIEW_TYPE_EXIF = 'exif-editor-view';
 
@@ -48,9 +54,10 @@ export class ExifEditorView extends ItemView {
       this.originalBinary = this.plugin.arrayBufferToBinaryString(arrayBuffer);
 
       try {
-        this.exifData = piexif.load(this.originalBinary);
+        const loaded = piexif.load(this.originalBinary);
+        this.exifData = safeParseExifData(loaded) ?? createEmptyExif();
       } catch {
-        this.exifData = this.plugin.createEmptyExif();
+        this.exifData = createEmptyExif();
       }
     } catch (error) {
       new Notice('Error reading image file');
@@ -95,22 +102,20 @@ export class ExifEditorView extends ItemView {
 
       const sectionObj = sectionMap[section];
       const tagCode = sectionObj?.[tag];
-      const sectionData = this.exifData?.[section as keyof ExifData];
-      const value = (typeof sectionData === 'object' && sectionData !== null && tagCode !== undefined)
-        ? String((sectionData as Record<string, unknown>)[tagCode] ?? '')
+
+      const value = (this.exifData && tagCode !== undefined)
+        ? getExifValue(this.exifData, section as keyof ExifData, tagCode)
         : '';
 
       setting.addText(text => {
         text.setPlaceholder(placeholder)
           .setValue(value)
           .onChange((newValue) => {
-            if (!this.exifData) this.exifData = this.plugin.createEmptyExif();
-            const sectionKey = section as keyof ExifData;
-            if (!this.exifData[sectionKey] || typeof this.exifData[sectionKey] !== 'object') {
-              this.exifData[sectionKey] = {};
+            if (!this.exifData) {
+              this.exifData = createEmptyExif();
             }
             if (tagCode !== undefined) {
-              (this.exifData[sectionKey] as Record<string, unknown>)[tagCode] = newValue;
+              setExifValue(this.exifData, section as keyof ExifData, tagCode, newValue);
             }
           });
       });
@@ -125,8 +130,14 @@ export class ExifEditorView extends ItemView {
 
     const updateJson = () => {
       try {
-        this.exifData = JSON.parse(jsonArea.value) as ExifData;
-        new Notice('JSON parsed successfully');
+        const parsed = JSON.parse(jsonArea.value);
+        const validated = safeParseExifData(parsed);
+        if (validated) {
+          this.exifData = validated;
+          new Notice('JSON parsed successfully');
+        } else {
+          new Notice('Invalid EXIF structure');
+        }
       } catch {
         new Notice('Invalid JSON');
       }
@@ -219,16 +230,6 @@ export default class ExifEditorPlugin extends Plugin {
     if (file) {
       await view.setFile(file);
     }
-  }
-
-  createEmptyExif(): ExifData {
-    return {
-      '0th': {},
-      'Exif': {},
-      'GPS': {},
-      '1st': {},
-      'thumbnail': null
-    };
   }
 
   arrayBufferToBinaryString(buffer: ArrayBuffer): string {
