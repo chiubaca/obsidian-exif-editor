@@ -16925,6 +16925,150 @@ function createEmptyExif() {
   });
 }
 
+// src/components/JsonTreeEditor.ts
+var JsonTreeEditor = class {
+  constructor(container, data, onChange) {
+    this.expandedPaths = /* @__PURE__ */ new Set();
+    this.container = container;
+    this.data = data;
+    this.onChange = onChange;
+    this.render();
+  }
+  setData(data) {
+    this.data = data;
+    this.render();
+  }
+  getData() {
+    return this.data;
+  }
+  render() {
+    this.container.empty();
+    this.container.addClass("json-tree-editor");
+    const tree = this.container.createDiv("json-tree");
+    this.renderValue(tree, this.data, "", 0);
+  }
+  renderValue(container, value, path, depth) {
+    if (value === null) {
+      container.createSpan({ text: "null", cls: "json-null" });
+    } else if (typeof value === "boolean") {
+      container.createSpan({ text: String(value), cls: "json-boolean" });
+    } else if (typeof value === "number") {
+      container.createSpan({ text: String(value), cls: "json-number" });
+    } else if (typeof value === "string") {
+      const span = container.createSpan({ cls: "json-string" });
+      span.textContent = `"${value}"`;
+    } else if (Array.isArray(value)) {
+      this.renderArray(container, value, path, depth);
+    } else if (typeof value === "object") {
+      this.renderObject(container, value, path, depth);
+    }
+  }
+  renderObject(container, obj, path, depth) {
+    const keys = Object.keys(obj);
+    const isEmpty = keys.length === 0;
+    if (isEmpty) {
+      container.createSpan({ text: "{}", cls: "json-bracket" });
+      return;
+    }
+    const isExpanded = this.expandedPaths.has(path) || depth < 1;
+    const header = container.createDiv("json-object-header");
+    const toggle = header.createSpan({
+      cls: `json-toggle ${isExpanded ? "is-expanded" : ""}`,
+      text: isExpanded ? "\u25BC" : "\u25B6"
+    });
+    header.createSpan({ text: "{", cls: "json-bracket" });
+    if (!isExpanded) {
+      header.createSpan({
+        text: ` ${keys.length} ${keys.length === 1 ? "item" : "items"} `,
+        cls: "json-collapsed-info"
+      });
+      header.createSpan({ text: "}", cls: "json-bracket" });
+    }
+    toggle.addEventListener("click", () => {
+      if (isExpanded) {
+        this.expandedPaths.delete(path);
+      } else {
+        this.expandedPaths.add(path);
+      }
+      this.render();
+    });
+    if (isExpanded) {
+      const body = container.createDiv("json-object-body");
+      body.style.marginLeft = "20px";
+      keys.forEach((key, index) => {
+        const row = body.createDiv("json-row");
+        const keySpan = row.createSpan({
+          text: `"${key}": `,
+          cls: "json-key"
+        });
+        keySpan.addEventListener("click", () => {
+          this.editKey(obj, key, path, () => this.render());
+        });
+        const valueContainer = row.createSpan("json-value-container");
+        this.renderValue(valueContainer, obj[key], `${path}.${key}`, depth + 1);
+        if (index < keys.length - 1) {
+          row.createSpan({ text: ",", cls: "json-comma" });
+        }
+      });
+      const closing = container.createDiv("json-closing-bracket");
+      closing.style.marginLeft = `${depth * 20}px`;
+      closing.createSpan({ text: "}", cls: "json-bracket" });
+    }
+  }
+  renderArray(container, arr, path, depth) {
+    if (arr.length === 0) {
+      container.createSpan({ text: "[]", cls: "json-bracket" });
+      return;
+    }
+    const isExpanded = this.expandedPaths.has(path) || depth < 1;
+    const header = container.createDiv("json-array-header");
+    const toggle = header.createSpan({
+      cls: `json-toggle ${isExpanded ? "is-expanded" : ""}`,
+      text: isExpanded ? "\u25BC" : "\u25B6"
+    });
+    header.createSpan({ text: "[", cls: "json-bracket" });
+    if (!isExpanded) {
+      header.createSpan({
+        text: ` ${arr.length} ${arr.length === 1 ? "item" : "items"} `,
+        cls: "json-collapsed-info"
+      });
+      header.createSpan({ text: "]", cls: "json-bracket" });
+    }
+    toggle.addEventListener("click", () => {
+      if (isExpanded) {
+        this.expandedPaths.delete(path);
+      } else {
+        this.expandedPaths.add(path);
+      }
+      this.render();
+    });
+    if (isExpanded) {
+      const body = container.createDiv("json-array-body");
+      body.style.marginLeft = "20px";
+      arr.forEach((item, index) => {
+        const row = body.createDiv("json-row");
+        const valueContainer = row.createSpan("json-value-container");
+        this.renderValue(valueContainer, item, `${path}[${index}]`, depth + 1);
+        if (index < arr.length - 1) {
+          row.createSpan({ text: ",", cls: "json-comma" });
+        }
+      });
+      const closing = container.createDiv("json-closing-bracket");
+      closing.style.marginLeft = `${depth * 20}px`;
+      closing.createSpan({ text: "]", cls: "json-bracket" });
+    }
+  }
+  editKey(obj, oldKey, path, onUpdate) {
+    const newKey = prompt("Rename key:", oldKey);
+    if (newKey && newKey !== oldKey) {
+      obj[newKey] = obj[oldKey];
+      delete obj[oldKey];
+      this.onChange(this.data);
+      onUpdate();
+    }
+  }
+};
+
 // src/main.ts
 var VIEW_TYPE_EXIF = "exif-editor-view";
 var ExifEditorView = class extends import_obsidian.ItemView {
@@ -17012,12 +17156,17 @@ var ExifEditorView = class extends import_obsidian.ItemView {
       });
     });
     contentEl.createEl("h4", { text: "Advanced: Raw EXIF JSON" });
-    const jsonArea = contentEl.createEl("textarea", {
-      cls: "exif-json-editor",
-      attr: { rows: "8", style: "width: 100%; font-family: monospace;" }
-    });
-    jsonArea.value = JSON.stringify(this.exifData, null, 2);
-    const updateJson = () => {
+    const jsonEditorContainer = contentEl.createDiv("json-editor-container");
+    let currentMode = "tree";
+    let jsonArea = null;
+    let treeEditor = null;
+    const modeToggle = jsonEditorContainer.createDiv("json-mode-toggle");
+    const treeBtn = modeToggle.createEl("button", { text: "Tree View" });
+    const textBtn = modeToggle.createEl("button", { text: "Text View" });
+    const editorContainer = jsonEditorContainer.createDiv("json-editor-content");
+    const updateFromText = () => {
+      if (!jsonArea)
+        return;
       try {
         const parsed = JSON.parse(jsonArea.value);
         const validated = safeParseExifData(parsed);
@@ -17031,10 +17180,59 @@ var ExifEditorView = class extends import_obsidian.ItemView {
         new import_obsidian.Notice("Invalid JSON");
       }
     };
+    const renderEditor = () => {
+      editorContainer.empty();
+      if (currentMode === "tree") {
+        treeBtn.addClass("is-active");
+        textBtn.removeClass("is-active");
+        const treeContainer = editorContainer.createDiv("json-tree-container");
+        treeEditor = new JsonTreeEditor(
+          treeContainer,
+          this.exifData,
+          (newData) => {
+            const validated = safeParseExifData(newData);
+            if (validated) {
+              this.exifData = validated;
+            }
+          }
+        );
+      } else {
+        textBtn.addClass("is-active");
+        treeBtn.removeClass("is-active");
+        jsonArea = editorContainer.createEl("textarea", {
+          cls: "exif-json-editor",
+          attr: { rows: "8", style: "width: 100%; font-family: monospace;" }
+        });
+        jsonArea.value = JSON.stringify(this.exifData, null, 2);
+      }
+    };
+    treeBtn.addEventListener("click", () => {
+      if (currentMode === "tree")
+        return;
+      if (jsonArea) {
+        updateFromText();
+      }
+      currentMode = "tree";
+      renderEditor();
+    });
+    textBtn.addEventListener("click", () => {
+      if (currentMode === "text")
+        return;
+      currentMode = "text";
+      renderEditor();
+    });
+    renderEditor();
     const buttonContainer = contentEl.createDiv({ cls: "exif-button-container" });
-    buttonContainer.createEl("button", { text: "Update from JSON", cls: "mod-cta" }).addEventListener("click", updateJson);
+    buttonContainer.createEl("button", { text: "Update from JSON", cls: "mod-cta" }).addEventListener("click", () => {
+      if (currentMode === "text" && jsonArea) {
+        updateFromText();
+      }
+    });
     const saveBtn = buttonContainer.createEl("button", { text: "Save EXIF", cls: "mod-cta" });
     saveBtn.addEventListener("click", () => {
+      if (currentMode === "text" && jsonArea) {
+        updateFromText();
+      }
       void this.plugin.saveExifData(this.file, this.originalBinary, this.exifData);
     });
   }

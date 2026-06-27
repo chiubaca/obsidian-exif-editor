@@ -7,6 +7,7 @@ import {
   setExifValue,
   createEmptyExif,
 } from './schemas/exif';
+import { JsonTreeEditor } from './components/JsonTreeEditor';
 
 export const VIEW_TYPE_EXIF = 'exif-editor-view';
 
@@ -122,13 +123,20 @@ export class ExifEditorView extends ItemView {
     });
 
     contentEl.createEl('h4', { text: 'Advanced: Raw EXIF JSON' });
-    const jsonArea = contentEl.createEl('textarea', {
-      cls: 'exif-json-editor',
-      attr: { rows: '8', style: 'width: 100%; font-family: monospace;' }
-    });
-    jsonArea.value = JSON.stringify(this.exifData, null, 2);
 
-    const updateJson = () => {
+    const jsonEditorContainer = contentEl.createDiv('json-editor-container');
+    let currentMode: 'tree' | 'text' = 'tree';
+    let jsonArea: HTMLTextAreaElement | null = null;
+    let treeEditor: JsonTreeEditor | null = null;
+
+    const modeToggle = jsonEditorContainer.createDiv('json-mode-toggle');
+    const treeBtn = modeToggle.createEl('button', { text: 'Tree View' });
+    const textBtn = modeToggle.createEl('button', { text: 'Text View' });
+
+    const editorContainer = jsonEditorContainer.createDiv('json-editor-content');
+
+    const updateFromText = () => {
+      if (!jsonArea) return;
       try {
         const parsed = JSON.parse(jsonArea.value);
         const validated = safeParseExifData(parsed);
@@ -143,12 +151,66 @@ export class ExifEditorView extends ItemView {
       }
     };
 
+    const renderEditor = () => {
+      editorContainer.empty();
+
+      if (currentMode === 'tree') {
+        treeBtn.addClass('is-active');
+        textBtn.removeClass('is-active');
+
+        const treeContainer = editorContainer.createDiv('json-tree-container');
+        treeEditor = new JsonTreeEditor(
+          treeContainer,
+          this.exifData,
+          (newData) => {
+            const validated = safeParseExifData(newData);
+            if (validated) {
+              this.exifData = validated;
+            }
+          }
+        );
+      } else {
+        textBtn.addClass('is-active');
+        treeBtn.removeClass('is-active');
+
+        jsonArea = editorContainer.createEl('textarea', {
+          cls: 'exif-json-editor',
+          attr: { rows: '8', style: 'width: 100%; font-family: monospace;' }
+        });
+        jsonArea.value = JSON.stringify(this.exifData, null, 2);
+      }
+    };
+
+    treeBtn.addEventListener('click', () => {
+      if (currentMode === 'tree') return;
+      if (jsonArea) {
+        updateFromText();
+      }
+      currentMode = 'tree';
+      renderEditor();
+    });
+
+    textBtn.addEventListener('click', () => {
+      if (currentMode === 'text') return;
+      currentMode = 'text';
+      renderEditor();
+    });
+
+    renderEditor();
+
     const buttonContainer = contentEl.createDiv({ cls: 'exif-button-container' });
 
-    buttonContainer.createEl('button', { text: 'Update from JSON', cls: 'mod-cta' }).addEventListener('click', updateJson);
+    buttonContainer.createEl('button', { text: 'Update from JSON', cls: 'mod-cta' }).addEventListener('click', () => {
+      if (currentMode === 'text' && jsonArea) {
+        updateFromText();
+      }
+    });
 
     const saveBtn = buttonContainer.createEl('button', { text: 'Save EXIF', cls: 'mod-cta' });
     saveBtn.addEventListener('click', () => {
+      if (currentMode === 'text' && jsonArea) {
+        updateFromText();
+      }
       void this.plugin.saveExifData(this.file!, this.originalBinary, this.exifData);
     });
   }
