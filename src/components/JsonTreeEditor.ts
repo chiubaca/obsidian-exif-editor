@@ -2,17 +2,21 @@ export class JsonTreeEditor {
   private container: HTMLElement;
   private data: unknown;
   private onChange: (data: unknown) => void;
+  private orientation: number;
   private expandedPaths: Set<string> = new Set();
+  private expandedThumbnails: Set<string> = new Set();
   private editingPath: string | null = null;
 
   constructor(
     container: HTMLElement,
     data: unknown,
-    onChange: (data: unknown) => void
+    onChange: (data: unknown) => void,
+    orientation: number = 1
   ) {
     this.container = container;
     this.data = data;
     this.onChange = onChange;
+    this.orientation = orientation;
     this.render();
   }
 
@@ -129,6 +133,30 @@ export class JsonTreeEditor {
     return trimmed;
   }
 
+  private isThumbnailData(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    if (value.length < 100) return false;
+    // Thumbnail data from piexifjs is a raw binary string, not Base64
+    return true;
+  }
+
+  private calculateBinarySize(binaryString: string): string {
+    const bytes = binaryString.length;
+    if (bytes < 1024) {
+      return `${bytes}B`;
+    }
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  }
+
+  private toggleThumbnail(path: string): void {
+    if (this.expandedThumbnails.has(path)) {
+      this.expandedThumbnails.delete(path);
+    } else {
+      this.expandedThumbnails.add(path);
+    }
+    this.render();
+  }
+
   private commitEdit(path: string, input: HTMLInputElement): void {
     const rawValue = input.value;
     const originalValue = this.getValueAtPath(path);
@@ -176,6 +204,59 @@ export class JsonTreeEditor {
     input.addEventListener('blur', () => {
       this.commitEdit(path, input);
     });
+  }
+
+  private renderThumbnail(
+    container: HTMLElement,
+    binaryData: string,
+    path: string
+  ): void {
+    const isExpanded = this.expandedThumbnails.has(path);
+    const size = this.calculateBinarySize(binaryData);
+
+    if (!isExpanded) {
+      const placeholder = container.createSpan({
+        cls: 'json-thumbnail-placeholder',
+        text: `<embedded image: ${size}>`,
+      });
+      placeholder.addEventListener('click', () => this.toggleThumbnail(path));
+    } else {
+      const previewContainer = container.createDiv('json-thumbnail-preview');
+
+      try {
+        // Convert raw binary string to Uint8Array
+        const bytes = new Uint8Array(binaryData.length);
+        for (let i = 0; i < binaryData.length; i++) {
+          bytes[i] = binaryData.charCodeAt(i);
+        }
+
+        // Create blob and object URL
+        const blob = new Blob([bytes], { type: 'image/jpeg' });
+        const url = URL.createObjectURL(blob);
+
+        const img = previewContainer.createEl('img', {
+          cls: `json-thumbnail-image json-orientation-${this.orientation}`,
+        });
+        img.src = url;
+        img.alt = 'Thumbnail preview';
+
+        // Clean up object URL after image loads to prevent memory leaks
+        img.addEventListener('load', () => {
+          URL.revokeObjectURL(url);
+        });
+      } catch {
+        previewContainer.createSpan({
+          text: 'Unable to render thumbnail',
+          cls: 'json-thumbnail-error',
+        });
+      }
+
+      const hideBtn = previewContainer.createEl('button', {
+        text: 'Hide',
+        cls: 'json-thumbnail-hide-btn',
+      });
+      hideBtn.addEventListener('click', () => this.toggleThumbnail(path));
+    }
   }
 
   private renderObject(
@@ -236,7 +317,9 @@ export class JsonTreeEditor {
         const valueContainer = row.createSpan('json-value-container');
         const childPath = path ? `${path}.${key}` : key;
 
-        if (this.editingPath === childPath) {
+        if (key === 'thumbnail' && this.isThumbnailData(obj[key])) {
+          this.renderThumbnail(valueContainer, obj[key] as string, childPath);
+        } else if (this.editingPath === childPath) {
           this.renderEditableValue(valueContainer, childPath, obj[key]);
         } else {
           this.renderValue(valueContainer, obj[key], childPath, depth + 1);

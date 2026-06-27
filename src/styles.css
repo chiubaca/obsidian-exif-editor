@@ -166,3 +166,86 @@
 .json-inline-input:focus {
   box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
+
+/* Thumbnail Styles */
+.json-thumbnail-placeholder {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-style: italic;
+  background: var(--background-modifier-hover);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: background 0.15s ease;
+}
+
+.json-thumbnail-placeholder:hover {
+  background: var(--background-modifier-active-hover);
+  color: var(--text-normal);
+}
+
+.json-thumbnail-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 4px 0;
+}
+
+.json-thumbnail-image {
+  max-width: 200px;
+  max-height: 200px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  object-fit: contain;
+}
+
+.json-thumbnail-error {
+  color: var(--text-error);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.json-thumbnail-hide-btn {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.json-thumbnail-hide-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+/* EXIF Orientation transforms for thumbnail */
+.json-orientation-2 {
+  transform: scaleX(-1);
+}
+
+.json-orientation-3 {
+  transform: rotate(180deg);
+}
+
+.json-orientation-4 {
+  transform: scaleY(-1);
+}
+
+.json-orientation-5 {
+  transform: scaleX(-1) rotate(90deg);
+}
+
+.json-orientation-6 {
+  transform: rotate(90deg);
+}
+
+.json-orientation-7 {
+  transform: scaleX(-1) rotate(-90deg);
+}
+
+.json-orientation-8 {
+  transform: rotate(-90deg);
+}

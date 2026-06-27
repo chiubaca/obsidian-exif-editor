@@ -159,6 +159,11 @@ export class ExifEditorView extends ItemView {
         textBtn.removeClass('is-active');
 
         const treeContainer = editorContainer.createDiv('json-tree-container');
+        
+        // Get orientation from EXIF data (tag 274 in 0th IFD)
+        const orientationValue = this.exifData?.['0th']?.[piexif.ImageIFD.Orientation];
+        const orientation = typeof orientationValue === 'number' ? orientationValue : 1;
+        
         treeEditor = new JsonTreeEditor(
           treeContainer,
           this.exifData,
@@ -167,7 +172,8 @@ export class ExifEditorView extends ItemView {
             if (validated) {
               this.exifData = validated;
             }
-          }
+          },
+          orientation
         );
       } else {
         textBtn.addClass('is-active');
