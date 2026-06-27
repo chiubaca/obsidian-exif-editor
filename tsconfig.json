@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "*": ["./*"]
+    },
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "module": "NodeNext",
+    "target": "ES2015",
+    "allowJs": true,
+    "noImplicitAny": true,
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "lib": ["ES2015", "DOM"]
+  },
+  "include": ["src/**/*"]
+}
