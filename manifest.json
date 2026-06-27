@@ -1,8 +1,8 @@
 {
   "id": "exif-editor",
   "name": "EXIF Editor",
-  "version": "1.0.9",
-  "minAppVersion": "1.0.0",
+  "version": "1.0.10",
+  "minAppVersion": "1.7.2",
   "description": "Edit EXIF data of photo files in your vault.",
   "author": "Alex Chiu",
   "authorUrl": "https://github.com/chiubaca",
