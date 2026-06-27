@@ -24,6 +24,6 @@ esbuild
     logLevel: "info",
     sourcemap: prod ? false : "inline",
     treeShaking: true,
-    outfile: "main.js",
+    outfile: "dist/main.js",
   })
   .catch(() => process.exit(1));
