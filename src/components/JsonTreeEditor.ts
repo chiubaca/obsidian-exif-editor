@@ -3,6 +3,7 @@ export class JsonTreeEditor {
   private data: unknown;
   private onChange: (data: unknown) => void;
   private expandedPaths: Set<string> = new Set();
+  private expandedThumbnails: Set<string> = new Set();
   private editingPath: string | null = null;
 
   constructor(
@@ -129,6 +130,30 @@ export class JsonTreeEditor {
     return trimmed;
   }
 
+  private isThumbnailData(value: unknown): boolean {
+    if (typeof value !== 'string') return false;
+    if (value.length < 100) return false;
+    // Check if it looks like Base64
+    return /^[A-Za-z0-9+/=]+$/.test(value);
+  }
+
+  private calculateBase64Size(base64String: string): string {
+    const bytes = Math.ceil((base64String.length * 3) / 4);
+    if (bytes < 1024) {
+      return `${bytes}B`;
+    }
+    return `${(bytes / 1024).toFixed(1)}KB`;
+  }
+
+  private toggleThumbnail(path: string): void {
+    if (this.expandedThumbnails.has(path)) {
+      this.expandedThumbnails.delete(path);
+    } else {
+      this.expandedThumbnails.add(path);
+    }
+    this.render();
+  }
+
   private commitEdit(path: string, input: HTMLInputElement): void {
     const rawValue = input.value;
     const originalValue = this.getValueAtPath(path);
@@ -176,6 +201,44 @@ export class JsonTreeEditor {
     input.addEventListener('blur', () => {
       this.commitEdit(path, input);
     });
+  }
+
+  private renderThumbnail(
+    container: HTMLElement,
+    base64Data: string,
+    path: string
+  ): void {
+    const isExpanded = this.expandedThumbnails.has(path);
+    const size = this.calculateBase64Size(base64Data);
+
+    if (!isExpanded) {
+      const placeholder = container.createSpan({
+        cls: 'json-thumbnail-placeholder',
+        text: `<embedded image: ${size}>`,
+      });
+      placeholder.addEventListener('click', () => this.toggleThumbnail(path));
+    } else {
+      const previewContainer = container.createDiv('json-thumbnail-preview');
+
+      try {
+        const img = previewContainer.createEl('img', {
+          cls: 'json-thumbnail-image',
+        });
+        img.src = `data:image/jpeg;base64,${base64Data}`;
+        img.alt = 'Thumbnail preview';
+      } catch {
+        previewContainer.createSpan({
+          text: 'Unable to render thumbnail',
+          cls: 'json-thumbnail-error',
+        });
+      }
+
+      const hideBtn = previewContainer.createEl('button', {
+        text: 'Hide',
+        cls: 'json-thumbnail-hide-btn',
+      });
+      hideBtn.addEventListener('click', () => this.toggleThumbnail(path));
+    }
   }
 
   private renderObject(
@@ -236,7 +299,9 @@ export class JsonTreeEditor {
         const valueContainer = row.createSpan('json-value-container');
         const childPath = path ? `${path}.${key}` : key;
 
-        if (this.editingPath === childPath) {
+        if (key === 'thumbnail' && this.isThumbnailData(obj[key])) {
+          this.renderThumbnail(valueContainer, obj[key] as string, childPath);
+        } else if (this.editingPath === childPath) {
           this.renderEditableValue(valueContainer, childPath, obj[key]);
         } else {
           this.renderValue(valueContainer, obj[key], childPath, depth + 1);
