@@ -8,6 +8,7 @@ import {
   createEmptyExif,
 } from './schemas/exif';
 import { JsonTreeEditor } from './components/JsonTreeEditor';
+import { GpsMapEditor } from './components/GpsMapEditor';
 
 export const VIEW_TYPE_EXIF = 'exif-editor-view';
 
@@ -121,6 +122,14 @@ export class ExifEditorView extends ItemView {
           });
       });
     });
+
+    contentEl.createEl('h4', { text: 'GPS Location' });
+    const gpsSection = contentEl.createDiv('exif-gps-section');
+    if (this.exifData) {
+      new GpsMapEditor(gpsSection, this.exifData, (newData) => {
+        this.exifData = newData;
+      });
+    }
 
     contentEl.createEl('h4', { text: 'Advanced: Raw EXIF JSON' });
 
